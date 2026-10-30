@@ -46,7 +46,7 @@ xcodebuild -project StemSplitter.xcodeproj -scheme StemSplitter \
 
 ## TestFlight activation
 
-1. Account Holder accepts the updated Apple Developer Program agreement.
+1. Account Holder agreement is accepted (verified October 30, 2026).
 2. Finish the app record and connect the repository in the workflow above.
 3. Create the **Close Circle** external group and add the four privately supplied
    tester emails. Keep emails and relationship notes out of the public repository.
@@ -76,9 +76,17 @@ privacy manifest; cloud bootstrap download checksum passes. Earlier test-drive
 results are in `../TEST-DRIVE.md`. Physical-device performance, external beta
 installation, and the first cloud delivery remain unverified.
 
-Activation blocker observed 2026-10-30: Xcode says the Account Holder must accept
-the updated Apple Developer Program License Agreement before adding this product
-to Xcode Cloud. No cloud workflow or automatic distribution is active yet.
+Xcode Cloud workflow `Main → TestFlight` is active for changes to `main`.
+Product: B43A526F-B53B-4F50-92FA-728DAA5ED2FD.
+Workflow: 28B2B5BD-48E5-4591-95D1-4B9EE20D2174.
+App Store Connect app: 6829064887. First cloud build started October 30, 2026.
+The agreement warning was stale and cleared after restarting Xcode.
+External tester distribution still requires beta-review contact information and
+group configuration.
+
+The build declares `ITSAppUsesNonExemptEncryption = NO`: the only network
+encryption in this dependency-free app is Apple URLSession HTTPS. Reassess this
+if adding cryptographic libraries or new networking implementations.
 
 Apple references:
 - https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow
