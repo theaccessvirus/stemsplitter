@@ -44,20 +44,24 @@ xcodebuild -project StemSplitter.xcodeproj -scheme StemSplitter \
   -allowProvisioningUpdates archive
 ```
 
-## TestFlight activation
+## TestFlight operation
 
-1. Account Holder agreement is accepted (verified October 30, 2026).
-2. Finish the app record and connect the repository in the workflow above.
-3. Create the **Close Circle** external group and add the four privately supplied
-   tester emails. Keep emails and relationship notes out of the public repository.
-4. Complete beta description, feedback/review contact, and export-compliance
-   answers; submit the first external build for Beta App Review. After approval,
-   enable automatic distribution for the group.
-5. Verify a cloud build from `main`, followed by a TestFlight install and full
-   import → split → mix → save/reopen flow on a physical iPhone.
+The **Close Circle** external group contains the four privately supplied testers.
+Group ID: `4d9807da-8798-4b54-af5a-2402f36c14b6`. Public invitations are disabled.
+The **Development** internal group exists as Apple's prerequisite for external groups.
+Tester contact details stay in App Store Connect, not in this public repository.
 
-A successful upload is not external beta approval. Apple can require review for
-later builds too. This workflow does not publish an App Store release.
+Beta description, reviewer contact, feedback email, no-login instructions, and
+build 2 test notes are saved. Build **1.0 (2)** is **Waiting for Review** as of
+October 30, 2026, with **Automatically notify testers** enabled.
+
+The workflow archives on `main` changes and uses the **TestFlight External Testing**
+post-action for **Close Circle**. Editing is restricted to the Account Holder,
+Admins, and App Managers, as Apple requires for external distribution.
+
+Apple can require review for later builds too. This workflow does not publish an
+App Store release. Next verification after approval: install using TestFlight on
+a physical iPhone and exercise import → split → mix → save/reopen.
 
 ## Privacy and release validation
 
@@ -74,15 +78,16 @@ behavior before finalizing App Store privacy labels and publish the policy URL.
 Validated 2026-10-30: local signed Release archive succeeds with the model and
 privacy manifest; cloud bootstrap download checksum passes. Earlier test-drive
 results are in `../TEST-DRIVE.md`. Physical-device performance, external beta
-installation, and the first cloud delivery remain unverified.
+installation remains unverified. Cloud builds 1 and 2 uploaded successfully;
+build 2 passed processing and was submitted for external review.
 
 Xcode Cloud workflow `Main → TestFlight` is active for changes to `main`.
 Product: B43A526F-B53B-4F50-92FA-728DAA5ED2FD.
 Workflow: 28B2B5BD-48E5-4591-95D1-4B9EE20D2174.
 App Store Connect app: 6829064887. First cloud build started October 30, 2026.
 The agreement warning was stale and cleared after restarting Xcode.
-External tester distribution still requires beta-review contact information and
-group configuration.
+External tester distribution is configured for Close Circle. Build 2 is awaiting
+Apple Beta App Review; invitations are set to notify testers automatically.
 
 The build declares `ITSAppUsesNonExemptEncryption = NO`: the only network
 encryption in this dependency-free app is Apple URLSession HTTPS. Reassess this
