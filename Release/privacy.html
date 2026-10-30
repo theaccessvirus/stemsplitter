@@ -36,70 +36,33 @@
 <body>
 <main>
   <h1>StemSplitter Privacy Policy</h1>
-  <p class="updated">Last updated: October 1, 2026</p>
-
-  <div class="summary">
-    <p><strong>The short version:</strong></p>
-    <ul>
-      <li>All processing happens <strong>on your device</strong>. No audio or video is ever uploaded.</li>
-      <li><strong>We collect no data</strong> — no analytics, no tracking, no advertising.</li>
-      <li><strong>No accounts.</strong> The app has no sign-in and no user records of any kind.</li>
-      <li>The app makes <strong>no network requests</strong> and contains <strong>no third-party SDKs</strong>.</li>
-    </ul>
-  </div>
-
-  <h2>What StemSplitter does</h2>
-  <p>StemSplitter takes a video from your photo library, extracts its audio, and splits it
-  into vocals and instrumental tracks — entirely on your iPhone, using the device's own
-  processor and Neural Engine. The app works offline (in airplane mode) for videos already
-  stored on your phone.</p>
-
-  <h2>How your media is handled</h2>
-  <ul>
-    <li><strong>Video selection:</strong> picking a video uses Apple's system photo picker,
-    which runs outside the app. StemSplitter never gains access to your photo library and
-    receives only the one video you chose.</li>
-    <li><strong>Processing:</strong> the audio is decoded and split on your device. Nothing
-    is transmitted to any server, because the app has no server and no networking code.</li>
-    <li><strong>Temporary files:</strong> split audio files are written only to the app's
-    own caches on your device and are automatically deleted the next time you open the
-    app. They are never uploaded.</li>
-    <li><strong>Exports:</strong> when you share or save a WAV file, that file leaves the
-    app only because <em>you</em> send it somewhere (for example to Files or another app).
-    That transfer is handled entirely by iOS at your direction.</li>
-    <li><strong>iCloud videos:</strong> if you pick a video that isn't downloaded to your
-    phone, iOS itself fetches it from your own iCloud Photo Library using Apple's system
-    infrastructure. StemSplitter never sends your media anywhere.</li>
-  </ul>
-
-  <h2>Data we collect</h2>
-  <p>None. StemSplitter collects no data of any kind — no identifiers, no usage data, no
-  diagnostics, no location, no contacts, no audio or video content. There are no accounts,
-  so there are no user records to store or breach. The App Store's privacy label for
-  StemSplitter states "Data Not Collected," and the app ships a privacy manifest declaring
-  no tracking, no tracking domains, and no collected data types.</p>
-
-  <h2>Required-reason API disclosure</h2>
-  <p>To avoid filling your storage, StemSplitter checks how much free disk space is
-  available before starting a split, solely to decide whether there is enough room to
-  write the output files. This falls under Apple's required-reason API category for disk
-  space (reason code E174.1), which is declared in the app's privacy manifest. The app
-  uses no other required-reason APIs and does not read, store, or transmit file
-  timestamps or any other device information.</p>
-
-  <h2>Children's privacy</h2>
-  <p>Because StemSplitter collects no data at all, it collects nothing from anyone,
-  including children under 13.</p>
-
-  <h2>Changes to this policy</h2>
-  <p>If a future version of StemSplitter ever collected data or added third-party code,
-  this policy and the App Store privacy label would be updated first. As shipped, the app
-  cannot send your data anywhere.</p>
-
+  <p class="updated">Last updated: October 30, 2026</p>
+  <h2>On-device separation and saved music</h2>
+  <p>StemSplitter separates selected media into vocals, drums, bass, and other
+  instruments on your device. We do not upload your media for separation.
+  Completed stems and song metadata stay in the app's local storage until you
+  delete them or remove the app. Device backups may include this storage according
+  to your Apple backup settings.</p>
+  <h2>Optional network features</h2>
+  <p>Importing a Spotify or YouTube link contacts those services to find and fetch
+  media. Those requests expose normal connection information, such as your IP
+  address and the requested track or search, to the services involved. Their own
+  privacy policies apply. Local media separation does not require those requests.
+  Apple's media picker may also download your chosen media from iCloud.</p>
+  <h2>Sharing and diagnostics</h2>
+  <p>Exports go to the destination you select in the system share sheet. The app
+  does not include advertising, tracking, analytics SDKs, or an app account system.
+  During the beta, Apple TestFlight may provide crash reports and feedback to the
+  developer under Apple's TestFlight privacy terms.</p>
+  <h2>Device information used locally</h2>
+  <p>The app checks free disk space before writing stems, reads timestamps of its
+  own saved files to display history, and uses host time to synchronize playback.
+  These values are not sent to the developer by the app.</p>
   <h2>Contact</h2>
-  <!-- TODO(contact): replace with the developer's support address before this page is published. Tracked in Release/APP_STORE.md submission checklist. -->
-  <p>Questions about this policy: contact the developer via the support address listed on
-  StemSplitter's App Store page.</p>
+  <p>Beta testers can contact the developer through TestFlight feedback.
+  General questions can be submitted on the
+  <a href="https://github.com/theaccessvirus/stemsplitter/issues">project issue tracker</a>.
+  Issues are public; do not include private recordings or personal information.</p>
 </main>
 </body>
 </html>

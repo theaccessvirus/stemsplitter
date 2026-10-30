@@ -326,8 +326,11 @@ private struct DecorativeWave: View {
             var path = Path()
             for i in 0..<bars {
                 let x = Double(i)
-                let v = abs(sin(x * 0.37 + Double(seed) * 1.7) * cos(x * 0.11 + Double(seed)))
-                let h = max(2, v * size.height)
+                let phase = Double(seed)
+                let first = sin(x * 0.37 + phase * 1.7)
+                let second = cos(x * 0.11 + phase)
+                let v = abs(first * second)
+                let h: CGFloat = max(2, CGFloat(v) * size.height)
                 path.addRoundedRect(in: CGRect(x: CGFloat(i) * 4, y: (size.height - h) / 2, width: 2, height: h),
                                     cornerSize: CGSize(width: 1, height: 1))
             }
