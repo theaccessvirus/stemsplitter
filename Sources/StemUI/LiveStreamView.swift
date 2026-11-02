@@ -274,7 +274,9 @@ public struct LiveStreamView: View {
             .onAppear {
                 token = LiveStreamKey.load()
                 let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
-                if autoConnect, !player.connected, !key.isEmpty {
+                // Auto-connect on every open when a key is saved, not only via deep
+                // link. A shared URL (deep link) submits first; a plain open connects.
+                if !player.connected, !key.isEmpty {
                     if let source, !source.isEmpty {
                         Task { await submitThenConnect(source, key: key) }
                     } else {
