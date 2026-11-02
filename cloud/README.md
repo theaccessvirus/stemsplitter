@@ -46,8 +46,16 @@ stems exactly as with Pi capture. `/health` reports `fetching`.
 
 One source at a time: `/submit` returns 409 while a live capture producer is
 connected or another URL is still playing. Stop live capture before share-sheet
-use. Build the iOS Shortcut per `SHARE-SHEET.md`; it POSTs to
-`https://theaccessvir.us/onlystems/submit`.
+use.
+
+The app drives this end to end: a URL shared from YouTube opens
+`onlystems://live?src=<url>`, and the app POSTs `/submit` itself with its
+Keychain key (so the token never leaves the app), seeks to the shared
+timestamp, auto-connects, and keeps playing in the background
+(`UIBackgroundModes=audio`). `/submit` returns the yt-dlp `title` and
+`duration`, shown on the live screen with an Open-in-YouTube link. The iOS
+Shortcut in `SHARE-SHEET.md` is the fallback entry point; the deep link ships
+in the app binary (URL scheme `onlystems`).
 
 Server needs `yt-dlp` and `websockets` in the venv (`deno` on PATH for YouTube's
 JS challenge), `ffmpeg` on PATH, and `ONLYSTEMS_CAPTURE_URL` in `stream.env`
