@@ -126,6 +126,25 @@ async def describe(url):
         return '', 0
 
 
+async def stop_fetch():
+    """Stop the current share-sheet fetch and wait for its /capture slot to free.
+    The /capture handler clears `producer` in its finally block."""
+    global fetch_proc
+    proc = fetch_proc
+    if proc is None or proc.returncode is not None:
+        return
+    proc.terminate()
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=5)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+    for _ in range(50):
+        if producer is None:
+            break
+        await asyncio.sleep(0.1)
+
+
 @app.post('/submit')
 async def submit(request: Request):
     """Receive one URL from the iOS Share Sheet and play it through the capture pipeline."""
@@ -136,11 +155,14 @@ async def submit(request: Request):
     if not url.startswith(('http://', 'https://')):
         raise HTTPException(status_code=400, detail='Need an http(s) url')
     global fetch_proc
-    if producer is not None:
+    fetch_running = fetch_proc is not None and fetch_proc.returncode is None
+    # An external live capture (Pi) is a producer with no fetch subprocess: never interrupt it.
+    if producer is not None and not fetch_running:
         raise HTTPException(status_code=409, detail='Live capture is connected; stop it first')
-    if fetch_proc is not None and fetch_proc.returncode is None:
-        raise HTTPException(status_code=409, detail='Already playing a track; wait for it to finish')
+    # Describe while the old track still plays, then swap: a new URL replaces the current one.
     title, duration = await describe(url)
+    if fetch_running:
+        await stop_fetch()
     # Isolated subprocess: a yt-dlp or ffmpeg failure can never take the server down.
     fetch_proc = await asyncio.create_subprocess_exec(sys.executable, 'fetch.py', url)
     return {'accepted': url, 'title': title, 'duration': duration}

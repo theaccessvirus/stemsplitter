@@ -292,6 +292,14 @@ public struct LiveStreamView: View {
                 }
                 #endif
             }
+            .onChange(of: source) { _, newSource in
+                // A new shared link arriving while the screen is already open:
+                // onAppear fired only once, so resubmit here to swap the track.
+                guard let newSource, !newSource.isEmpty else { return }
+                let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !key.isEmpty else { return }
+                Task { await submitThenConnect(newSource, key: key) }
+            }
             .onDisappear { player.disconnect() }
         }
     }
