@@ -15,12 +15,16 @@ from urllib.parse import urlparse
 import websockets
 
 CHUNK = 4410 * 2 * 4  # 100ms stereo float32le at 44100Hz, matching server.py
+# launchd gives the service a minimal PATH, so name both binaries explicitly.
+# yt-dlp runs as a module of this same venv python; ffmpeg path is overridable.
+FFMPEG = os.environ.get('ONLYSTEMS_FFMPEG', '/opt/homebrew/bin/ffmpeg')
 
 
 async def resolve(url):
     """Ask yt-dlp for the direct media URL; fall back to the URL itself for raw streams."""
     proc = await asyncio.create_subprocess_exec(
-        'yt-dlp', '-q', '--no-warnings', '-g', '-f', 'bestaudio/best', '--', url,
+        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '-g', '-f', 'bestaudio/best',
+        '--', url,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     out, _ = await proc.communicate()
     for line in out.decode().splitlines():
@@ -42,7 +46,7 @@ async def main(url):
             max_size=65536, max_queue=2, close_timeout=3, ssl=ssl_context) as ws:
         # -re feeds at playback speed so the server's 10s queue never overflows.
         ff = await asyncio.create_subprocess_exec(
-            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-re', '-i', source,
+            FFMPEG, '-hide_banner', '-loglevel', 'error', '-re', '-i', source,
             '-ac', '2', '-ar', '44100', '-c:a', 'pcm_f32le', '-f', 'f32le', 'pipe:1',
             stdout=asyncio.subprocess.PIPE)
         try:
