@@ -190,8 +190,10 @@ public struct LiveStreamView: View {
     @Environment(\.dismiss) private var dismiss
     private let names = ["Drums", "Bass", "Other", "Vocals"]
     private let colors: [Color] = [.red, .green, .orange, .cyan]
+    /// Opened from the onlystems:// deep link: connect on appear using the saved key.
+    private let autoConnect: Bool
 
-    public init() {}
+    public init(autoConnect: Bool = false) { self.autoConnect = autoConnect }
 
     public var body: some View {
         NavigationStack {
@@ -247,6 +249,11 @@ public struct LiveStreamView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .onAppear {
                 token = LiveStreamKey.load()
+                if autoConnect, !player.connected,
+                   !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   token: token.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
                 #if DEBUG && targetEnvironment(simulator)
                 if ProcessInfo.processInfo.arguments.contains("-SSLiveSmokeTest"),
                    let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,

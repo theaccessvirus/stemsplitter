@@ -36,9 +36,20 @@ Requirements on hbd-server:
 
 ## Use it
 
-1. In the YouTube app (or Safari), tap **Share**.
+1. In the YouTube app, tap **Share**. Enable **"Start at [current time]"** so the
+   URL carries the timestamp; the server seeks there instead of restarting.
 2. Scroll to **OnlyStems**, tap it.
-3. Open the OnlyStems app; the stems are already streaming. Mute any stem.
+3. The OnlyStems app opens straight to the live screen and starts playing (the
+   shortcut ends with `Open URL onlystems://live`, which auto-connects with the
+   saved key). Mute any stem.
+
+The `onlystems://live` deep link ships in the app binary; it works only after
+the TestFlight build that added it (URL scheme `onlystems`, auto-connect in
+`LiveStreamView`). Until then, end the shortcut with `Open App → StemSplitter`
+and tap onlyStems Live → Connect.
+
+Start-time parsing lives in `fetch.py` (`t`, `start`, `time_continue`), passed to
+ffmpeg as `-ss`. Radio streams ignore it.
 
 ## Notes
 

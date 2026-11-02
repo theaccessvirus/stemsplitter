@@ -20,6 +20,7 @@ public struct AppFlowView: View {
     @State private var showingHistory = false
     @State private var showingLinkSheet = false
     @State private var showingLiveStream = false
+    @State private var autoConnectLive = false
 
     public init(engine: any StemEngineProtocol) {
         _model = StateObject(wrappedValue: AppFlowModel(engine: engine))
@@ -55,7 +56,16 @@ public struct AppFlowView: View {
                 })
                 .presentationDetents([.large])
         }
-        .sheet(isPresented: $showingLiveStream) { LiveStreamView() }
+        .sheet(isPresented: $showingLiveStream, onDismiss: { autoConnectLive = false }) {
+            LiveStreamView(autoConnect: autoConnectLive)
+        }
+        .onOpenURL { url in
+            // onlystems://live (from the Share Sheet shortcut) jumps straight to
+            // the live screen and connects with the saved key.
+            guard url.scheme == "onlystems" else { return }
+            autoConnectLive = true
+            showingLiveStream = true
+        }
         .sheet(isPresented: $showingLinkSheet) {
             LinkDownloadSheet(model: linkModel)
                 .onAppear { linkModel.onSplit = { splitDownloaded($0) } }
@@ -116,7 +126,7 @@ public struct AppFlowView: View {
                 onOpenHistory: { model.history.reload(); showingHistory = true },
                 onImportFile: { importingFile = true },
                 onLinkDownload: { showingLinkSheet = true },
-                onLiveStream: { showingLiveStream = true }
+                onLiveStream: { autoConnectLive = false; showingLiveStream = true }
             )
             .onChange(of: pickerItem) { _, item in
                 Task { await importPicked(item) }
