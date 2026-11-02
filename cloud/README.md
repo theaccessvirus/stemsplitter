@@ -107,3 +107,20 @@ bass 0.0596, other 0.1447, vocals 0.1283). Warm inference measured 0.243 s for
 four seconds of audio. Server restart triggered Pi service recovery (NRestarts=1),
 and the native simulator reconnected and resumed playback. Drums solo toggled
 on and off in the native UI. Physical audio routing remains unverified.
+
+## TestFlight delivery
+
+Version 1.0 (4), commit `89e0929`, is **Testing** in App Store Connect for both
+Development (Adam, internal) and Close Circle (four external testers), verified
+2026-11-02. Build ID: `7acb0ccf-3ce9-4ac1-aead-07c83993aa8f`.
+Xcode Cloud build 4: `999985d6-8307-49a1-9b4b-1358c56ea95d`.
+The external workflow assigned Close Circle automatically; Development was
+assigned manually after processing. What to Test instructions were saved.
+Build 3 was superseded; duplicate manual build 5 was canceled before completion.
+
+On the phone: update StemSplitter in TestFlight, open onlyStems Live, paste the
+private key from local `.work/live/access-key.txt`, and Connect. The endpoint is
+prefilled. Keep this preview screen open and begin with headphones on a separate
+receiving iPhone. The secret is intentionally not included in TestFlight notes.
+The simulator was stopped after testing; Pi capture remains enabled and the
+server waits without inference until a listener connects.
