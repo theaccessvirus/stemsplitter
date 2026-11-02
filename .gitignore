@@ -8,3 +8,5 @@ xcuserdata/
 .zcode/
 .gstack/
 Models/
+
+__pycache__/

@@ -19,6 +19,7 @@ public struct AppFlowView: View {
     @State private var importing = false
     @State private var showingHistory = false
     @State private var showingLinkSheet = false
+    @State private var showingLiveStream = false
 
     public init(engine: any StemEngineProtocol) {
         _model = StateObject(wrappedValue: AppFlowModel(engine: engine))
@@ -54,6 +55,7 @@ public struct AppFlowView: View {
                 })
                 .presentationDetents([.large])
         }
+        .sheet(isPresented: $showingLiveStream) { LiveStreamView() }
         .sheet(isPresented: $showingLinkSheet) {
             LinkDownloadSheet(model: linkModel)
                 .onAppear { linkModel.onSplit = { splitDownloaded($0) } }
@@ -86,6 +88,7 @@ public struct AppFlowView: View {
     private func simulatorQAHooks() {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-SSOpenLiveStream") { showingLiveStream = true }
         if args.contains("-SSOpenHistory") {
             model.history.reload()
             showingHistory = true
@@ -112,7 +115,8 @@ public struct AppFlowView: View {
                 selection: $pickerItem,
                 onOpenHistory: { model.history.reload(); showingHistory = true },
                 onImportFile: { importingFile = true },
-                onLinkDownload: { showingLinkSheet = true }
+                onLinkDownload: { showingLinkSheet = true },
+                onLiveStream: { showingLiveStream = true }
             )
             .onChange(of: pickerItem) { _, item in
                 Task { await importPicked(item) }
@@ -209,6 +213,7 @@ struct HomeView: View {
     let onOpenHistory: () -> Void
     let onImportFile: () -> Void
     let onLinkDownload: () -> Void
+    let onLiveStream: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -280,7 +285,12 @@ struct HomeView: View {
                 .buttonStyle(SecondaryButtonStyle())
                 .accessibilityLabel("Split a Spotify or YouTube link")
 
-                Label("Runs on this iPhone. Nothing is uploaded.", systemImage: "lock.fill")
+                Button(action: onLiveStream) {
+                    Label("onlyStems Live", systemImage: "antenna.radiowaves.left.and.right")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+
+                Label("File splits stay on this iPhone.", systemImage: "lock.fill")
                     .font(.footnote)
                     .foregroundStyle(Color.ssTextSecondary)
                     .padding(.top, 4)

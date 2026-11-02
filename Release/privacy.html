@@ -36,10 +36,10 @@
 <body>
 <main>
   <h1>StemSplitter Privacy Policy</h1>
-  <p class="updated">Last updated: October 30, 2026</p>
+  <p class="updated">Last updated: November 2, 2026</p>
   <h2>On-device separation and saved music</h2>
   <p>StemSplitter separates selected media into vocals, drums, bass, and other
-  instruments on your device. We do not upload your media for separation.
+  instruments on your device. Local file splitting does not upload your media for separation.
   Completed stems and song metadata stay in the app's local storage until you
   delete them or remove the app. Device backups may include this storage according
   to your Apple backup settings.</p>
@@ -49,6 +49,13 @@
   address and the requested track or search, to the services involved. Their own
   privacy policies apply. Local media separation does not require those requests.
   Apple's media picker may also download your chosen media from iCloud.</p>
+  <h2>Optional onlyStems Live</h2>
+  <p>Live mode connects to your configured separation server. A paired capture
+  device sends audio to that server, and the app receives separated stems over an
+  encrypted connection. The preview service buffers audio in memory and does not
+  save recordings. The service and network proxy may log connection metadata.
+  Your access key is stored in this device's Keychain. Disconnect stops playback;
+  the capture device has its own service controls.</p>
   <h2>Sharing and diagnostics</h2>
   <p>Exports go to the destination you select in the system share sheet. The app
   does not include advertising, tracking, analytics SDKs, or an app account system.

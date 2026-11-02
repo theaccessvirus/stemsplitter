@@ -10,8 +10,6 @@ struct StemSplitterApp: App {
         // History persists across launches (Application Support). Launch hygiene
         // is orphans only: dead in-progress sessions from an interrupted split.
         SplitStore(baseDirectory: SplitStore.defaultBaseDirectory()).purgeOrphans()
-        let engine = self.engine
-        Task.detached(priority: .utility) { await engine.prewarmModel() }
     }
 
     var body: some Scene {

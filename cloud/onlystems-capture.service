@@ -1,0 +1,11 @@
+[Unit]
+Description=onlyStems UxPlay cloud capture
+After=uxplay.service
+[Service]
+ExecStart=/usr/bin/python3 /home/theaccessvirus/onlystems-live/capture.py
+EnvironmentFile=/home/theaccessvirus/onlystems-live/stream.env
+Environment=ONLYSTEMS_CAPTURE_URL=wss://theaccessvir.us/onlystems/capture
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=default.target

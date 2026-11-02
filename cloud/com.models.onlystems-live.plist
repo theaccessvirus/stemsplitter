@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/models</string>
+		<key>PYTHONPATH</key>
+		<string>/Users/models/moses-stems/backend</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>GroupName</key>
+	<string>staff</string>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.models.onlystems-live</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>/Users/models/onlystems-live/run.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/models/onlystems-live/service.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/models/onlystems-live/service.log</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>UserName</key>
+	<string>models</string>
+	<key>WorkingDirectory</key>
+	<string>/Users/models/onlystems-live</string>
+</dict>
+</plist>
