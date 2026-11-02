@@ -192,12 +192,36 @@ public struct LiveStreamView: View {
     private let colors: [Color] = [.red, .green, .orange, .cyan]
     /// Opened from the onlystems:// deep link: connect on appear using the saved key.
     private let autoConnect: Bool
+    /// A URL shared in from YouTube: submit it to the server, then play.
+    private let source: String?
+    @State private var sourceTitle = ""
+    @State private var sourceDuration = 0
+    @State private var submitting = false
 
-    public init(autoConnect: Bool = false) { self.autoConnect = autoConnect }
+    public init(autoConnect: Bool = false, source: String? = nil) {
+        self.autoConnect = autoConnect
+        self.source = source
+    }
 
     public var body: some View {
         NavigationStack {
             Form {
+                if submitting || !sourceTitle.isEmpty {
+                    Section("Now playing") {
+                        if submitting { HStack { ProgressView(); Text("Sending to server…") } }
+                        if !sourceTitle.isEmpty {
+                            Text(sourceTitle).font(.headline)
+                            if sourceDuration > 0 {
+                                Text(durationLabel(sourceDuration)).foregroundStyle(Color.ssTextSecondary)
+                            }
+                        }
+                        if let source, let link = URL(string: source) {
+                            Link(destination: link) {
+                                Label("Open in YouTube", systemImage: "arrow.up.right.square")
+                            }
+                        }
+                    }
+                }
                 Section("Input · cloud capture") {
                     TextField("wss://server/onlystems/listen", text: $endpoint)
                         .autocorrectionDisabled()
@@ -249,10 +273,13 @@ public struct LiveStreamView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .onAppear {
                 token = LiveStreamKey.load()
-                if autoConnect, !player.connected,
-                   !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
-                                   token: token.trimmingCharacters(in: .whitespacesAndNewlines))
+                let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                if autoConnect, !player.connected, !key.isEmpty {
+                    if let source, !source.isEmpty {
+                        Task { await submitThenConnect(source, key: key) }
+                    } else {
+                        player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
+                    }
                 }
                 #if DEBUG && targetEnvironment(simulator)
                 if ProcessInfo.processInfo.arguments.contains("-SSLiveSmokeTest"),
@@ -265,6 +292,41 @@ public struct LiveStreamView: View {
             }
             .onDisappear { player.disconnect() }
         }
+    }
+
+    /// POST the shared URL to the server (starts separation), show its title,
+    /// then connect to the live stream with the same key.
+    private func submitThenConnect(_ url: String, key: String) async {
+        submitting = true
+        defer { submitting = false }
+        if let endpoint = submitEndpoint() {
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url])
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                sourceTitle = (meta["title"] as? String) ?? ""
+                sourceDuration = (meta["duration"] as? Int) ?? 0
+            }
+        }
+        player.connect(endpoint: self.endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
+    }
+
+    /// The submit endpoint is the listen endpoint with ws(s)→http(s) and /listen→/submit.
+    private func submitEndpoint() -> URL? {
+        var address = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        address = address.replacingOccurrences(of: "wss://", with: "https://")
+                         .replacingOccurrences(of: "ws://", with: "http://")
+        if address.hasSuffix("/listen") { address = String(address.dropLast(7)) + "/submit" }
+        return URL(string: address)
+    }
+
+    private func durationLabel(_ seconds: Int) -> String {
+        let h = seconds / 3600, m = (seconds % 3600) / 60, s = seconds % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 }
 

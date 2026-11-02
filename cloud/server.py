@@ -111,6 +111,21 @@ async def health():
     return {'service': 'onlyStems', **metrics, 'listeners': len(listeners), 'fetching': fetching}
 
 
+async def describe(url):
+    """Best-effort title and duration for display. yt-dlp runs as a venv module
+    because launchd gives the service a minimal PATH."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist',
+            '--print', '%(title)s', '--print', '%(duration)s', '--', url,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
+        title, _, duration = out.decode().strip().partition('\n')
+        return title.strip(), int(float(duration)) if duration.strip().replace('.', '').isdigit() else 0
+    except Exception:
+        return '', 0
+
+
 @app.post('/submit')
 async def submit(request: Request):
     """Receive one URL from the iOS Share Sheet and play it through the capture pipeline."""
@@ -125,9 +140,10 @@ async def submit(request: Request):
         raise HTTPException(status_code=409, detail='Live capture is connected; stop it first')
     if fetch_proc is not None and fetch_proc.returncode is None:
         raise HTTPException(status_code=409, detail='Already playing a track; wait for it to finish')
+    title, duration = await describe(url)
     # Isolated subprocess: a yt-dlp or ffmpeg failure can never take the server down.
     fetch_proc = await asyncio.create_subprocess_exec(sys.executable, 'fetch.py', url)
-    return {'accepted': url}
+    return {'accepted': url, 'title': title, 'duration': duration}
 
 
 @app.websocket('/listen')

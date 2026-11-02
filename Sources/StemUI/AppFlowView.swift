@@ -21,6 +21,7 @@ public struct AppFlowView: View {
     @State private var showingLinkSheet = false
     @State private var showingLiveStream = false
     @State private var autoConnectLive = false
+    @State private var liveSource: String?
 
     public init(engine: any StemEngineProtocol) {
         _model = StateObject(wrappedValue: AppFlowModel(engine: engine))
@@ -56,16 +57,10 @@ public struct AppFlowView: View {
                 })
                 .presentationDetents([.large])
         }
-        .sheet(isPresented: $showingLiveStream, onDismiss: { autoConnectLive = false }) {
-            LiveStreamView(autoConnect: autoConnectLive)
+        .sheet(isPresented: $showingLiveStream, onDismiss: { autoConnectLive = false; liveSource = nil }) {
+            LiveStreamView(autoConnect: autoConnectLive, source: liveSource)
         }
-        .onOpenURL { url in
-            // onlystems://live (from the Share Sheet shortcut) jumps straight to
-            // the live screen and connects with the saved key.
-            guard url.scheme == "onlystems" else { return }
-            autoConnectLive = true
-            showingLiveStream = true
-        }
+        .onOpenURL { url in handleDeepLink(url) }
         .sheet(isPresented: $showingLinkSheet) {
             LinkDownloadSheet(model: linkModel)
                 .onAppear { linkModel.onSplit = { splitDownloaded($0) } }
@@ -160,6 +155,27 @@ public struct AppFlowView: View {
                 )
                 .transition(.opacity)
             }
+        }
+    }
+
+    /// onlystems://<route>[?src=<url>] — every screen is reachable. `live` carries
+    /// a shared YouTube URL (submitted to the server, then played); `link` opens
+    /// the local split-from-link sheet; `history` opens history; `home` returns.
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "onlystems" else { return }
+        let src = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "src" }?.value
+        switch url.host ?? "live" {
+        case "link":
+            showingLinkSheet = true
+        case "history":
+            model.history.reload(); showingHistory = true
+        case "home":
+            showingLiveStream = false; showingLinkSheet = false; showingHistory = false
+        default: // "live"
+            liveSource = src
+            autoConnectLive = true
+            showingLiveStream = true
         }
     }
 
