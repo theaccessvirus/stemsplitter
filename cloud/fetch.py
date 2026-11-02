@@ -8,9 +8,10 @@ playback speed, so finite tracks play to the end and radio plays until stopped.
 """
 import asyncio
 import os
+import re
 import ssl
 import sys
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import websockets
 
@@ -18,6 +19,21 @@ CHUNK = 4410 * 2 * 4  # 100ms stereo float32le at 44100Hz, matching server.py
 # launchd gives the service a minimal PATH, so name both binaries explicitly.
 # yt-dlp runs as a module of this same venv python; ffmpeg path is overridable.
 FFMPEG = os.environ.get('ONLYSTEMS_FFMPEG', '/opt/homebrew/bin/ffmpeg')
+
+
+def start_seconds(url):
+    """Seconds to skip, from a YouTube 't'/'start' timestamp (150, 150s, 2m30s, 1h2m3s)."""
+    query = parse_qs(urlparse(url).query)
+    value = (query.get('t') or query.get('start') or query.get('time_continue') or [''])[0]
+    if not value:
+        return 0
+    if value.isdigit():
+        return int(value)
+    match = re.fullmatch(r'(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?', value)
+    if not match:
+        return 0
+    h, m, s = (int(g) if g else 0 for g in match.groups())
+    return h * 3600 + m * 60 + s
 
 
 async def resolve(url):
@@ -41,12 +57,14 @@ async def main(url):
     # TLS only when the capture endpoint is wss; the private LAN server speaks plain ws.
     ssl_context = ssl.create_default_context() if urlparse(capture_url).scheme == 'wss' else None
     source = await resolve(url)
+    # Start where the share left off: -ss before -i seeks the resolved stream.
+    seek = ['-ss', str(start_seconds(url))] if start_seconds(url) > 0 else []
     async with websockets.connect(
             capture_url, additional_headers={'Authorization': 'Bearer ' + token},
             max_size=65536, max_queue=2, close_timeout=3, ssl=ssl_context) as ws:
         # -re feeds at playback speed so the server's 10s queue never overflows.
         ff = await asyncio.create_subprocess_exec(
-            FFMPEG, '-hide_banner', '-loglevel', 'error', '-re', '-i', source,
+            FFMPEG, '-hide_banner', '-loglevel', 'error', *seek, '-re', '-i', source,
             '-ac', '2', '-ar', '44100', '-c:a', 'pcm_f32le', '-f', 'f32le', 'pipe:1',
             stdout=asyncio.subprocess.PIPE)
         try:
