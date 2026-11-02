@@ -17,6 +17,9 @@ final class LiveStemPacketTests: XCTestCase {
         XCTAssertEqual(packet.frames, 1)
         XCTAssertEqual(packet.samples, (0..<8).map(Float.init))
         XCTAssertThrowsError(try LiveStemPacket(data: data.dropLast()))
+        var overflow = data
+        for i in 4..<12 { overflow[i] = 255 }
+        XCTAssertThrowsError(try LiveStemPacket(data: overflow))
         data[0] = 0
         XCTAssertThrowsError(try LiveStemPacket(data: data))
     }

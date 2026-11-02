@@ -13,7 +13,8 @@ public struct LiveStemPacket: Sendable {
         }
         position = data.withUnsafeBytes { UInt64(littleEndian: $0.loadUnaligned(fromByteOffset: 4, as: UInt64.self)) }
         frames = Int(data.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(fromByteOffset: 12, as: UInt32.self)) })
-        guard frames > 0, frames <= 4410, data.count == 16 + frames * 8 * 4 else {
+        guard frames > 0, frames <= 4410, position <= UInt64.max - UInt64(frames),
+              data.count == 16 + frames * 8 * 4 else {
             throw PacketError.invalid
         }
         let count = frames * 8
