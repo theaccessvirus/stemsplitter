@@ -5,10 +5,11 @@ from contextlib import asynccontextmanager
 import hmac
 import os
 import struct
+import sys
 import time
 
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 RATE = 44100
 WINDOW = RATE * 4
@@ -20,6 +21,7 @@ TOKEN = os.environ.get('ONLYSTEMS_STREAM_TOKEN', '')
 # ponytail: one private capture, max four listeners. Multi-user sessions come later.
 listeners = set()
 producer = None
+fetch_proc = None  # ponytail: one share-sheet URL plays at a time
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='mlx-stream')
 model = None
 metrics = {'state': 'idle', 'chunks': 0, 'inference_seconds': 0.0, 'capture_peak': 0.0}
@@ -105,7 +107,27 @@ async def authorize(ws):
 
 @app.get('/health')
 async def health():
-    return {'service': 'onlyStems', **metrics, 'listeners': len(listeners)}
+    fetching = fetch_proc is not None and fetch_proc.returncode is None
+    return {'service': 'onlyStems', **metrics, 'listeners': len(listeners), 'fetching': fetching}
+
+
+@app.post('/submit')
+async def submit(request: Request):
+    """Receive one URL from the iOS Share Sheet and play it through the capture pipeline."""
+    if not hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + TOKEN):
+        raise HTTPException(status_code=401)
+    body = await request.json()
+    url = str((body or {}).get('url', '')).strip()
+    if not url.startswith(('http://', 'https://')):
+        raise HTTPException(status_code=400, detail='Need an http(s) url')
+    global fetch_proc
+    if producer is not None:
+        raise HTTPException(status_code=409, detail='Live capture is connected; stop it first')
+    if fetch_proc is not None and fetch_proc.returncode is None:
+        raise HTTPException(status_code=409, detail='Already playing a track; wait for it to finish')
+    # Isolated subprocess: a yt-dlp or ffmpeg failure can never take the server down.
+    fetch_proc = await asyncio.create_subprocess_exec(sys.executable, 'fetch.py', url)
+    return {'accepted': url}
 
 
 @app.websocket('/listen')

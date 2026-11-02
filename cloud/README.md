@@ -35,6 +35,24 @@ sharing a private key. Add per-session credentials before offering this broadly.
 The service stops GPU work when no listeners are connected. Capture still sends
 audio until its Pi service is stopped.
 
+## Share-sheet URL submission
+
+An alternative to live AirPlay capture: send a YouTube or radio URL straight from
+the iPhone with no copy/paste. `POST /submit` (Bearer token, body `{"url": ...}`)
+launches `fetch.py`, which resolves the direct audio URL with yt-dlp (falling back
+to raw radio/HLS URLs as-is) and streams it through ffmpeg into the same `/capture`
+socket at playback speed (`-re`). The `/listen` stream then plays the separated
+stems exactly as with Pi capture. `/health` reports `fetching`.
+
+One source at a time: `/submit` returns 409 while a live capture producer is
+connected or another URL is still playing. Stop live capture before share-sheet
+use. Build the iOS Shortcut per `SHARE-SHEET.md`; it POSTs to
+`https://theaccessvir.us/onlystems/submit`.
+
+Server needs `yt-dlp` and `websockets` in the venv (`deno` on PATH for YouTube's
+JS challenge), `ffmpeg` on PATH, and `ONLYSTEMS_CAPTURE_URL` in `stream.env`
+(`ws://172.16.0.36:8093/capture` for the local plain-ws server).
+
 ## Controls
 
 ```sh
