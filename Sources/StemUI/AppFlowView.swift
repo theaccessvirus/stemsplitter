@@ -19,9 +19,10 @@ public struct AppFlowView: View {
     @State private var importing = false
     @State private var showingHistory = false
     @State private var showingLinkSheet = false
-    @State private var showingLiveStream = false
-    @State private var autoConnectLive = false
-    @State private var liveSource: String?
+    /// The open live sheet. `.sheet(item:)` hands the link to the sheet directly;
+    /// `.sheet(isPresented:)` built it with a stale nil source on a cold launch.
+    @State private var live: LiveLaunch?
+    @State private var lastLink: (url: URL, at: Date)?
 
     public init(engine: any StemEngineProtocol) {
         _model = StateObject(wrappedValue: AppFlowModel(engine: engine))
@@ -57,8 +58,10 @@ public struct AppFlowView: View {
                 })
                 .presentationDetents([.large])
         }
-        .sheet(isPresented: $showingLiveStream, onDismiss: { autoConnectLive = false; liveSource = nil }) {
-            LiveStreamView(autoConnect: autoConnectLive, source: liveSource)
+        .sheet(item: $live) { launch in
+            LiveStreamView(autoConnect: launch.autoConnect, source: launch.source, request: launch.request)
+                // A presented sheet can receive the link instead of the view behind it.
+                .onOpenURL { url in handleDeepLink(url) }
         }
         .onOpenURL { url in handleDeepLink(url) }
         .sheet(isPresented: $showingLinkSheet) {
@@ -93,7 +96,7 @@ public struct AppFlowView: View {
     private func simulatorQAHooks() {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
-        if args.contains("-SSOpenLiveStream") { showingLiveStream = true }
+        if args.contains("-SSOpenLiveStream") { live = LiveLaunch() }
         if args.contains("-SSOpenHistory") {
             model.history.reload()
             showingHistory = true
@@ -121,7 +124,7 @@ public struct AppFlowView: View {
                 onOpenHistory: { model.history.reload(); showingHistory = true },
                 onImportFile: { importingFile = true },
                 onLinkDownload: { showingLinkSheet = true },
-                onLiveStream: { autoConnectLive = false; showingLiveStream = true }
+                onLiveStream: { live = LiveLaunch() }
             )
             .onChange(of: pickerItem) { _, item in
                 Task { await importPicked(item) }
@@ -163,6 +166,9 @@ public struct AppFlowView: View {
     /// the local split-from-link sheet; `history` opens history; `home` returns.
     private func handleDeepLink(_ url: URL) {
         guard url.scheme == "onlystems" else { return }
+        // Both handlers (home and live sheet) may fire for one link.
+        if let lastLink, lastLink.url == url, Date().timeIntervalSince(lastLink.at) < 1 { return }
+        lastLink = (url, Date())
         let src = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first { $0.name == "src" }?.value
         switch url.host ?? "live" {
@@ -171,11 +177,17 @@ public struct AppFlowView: View {
         case "history":
             model.history.reload(); showingHistory = true
         case "home":
-            showingLiveStream = false; showingLinkSheet = false; showingHistory = false
+            live = nil; showingLinkSheet = false; showingHistory = false
         default: // "live"
-            liveSource = src
-            autoConnectLive = true
-            showingLiveStream = true
+            // Already open: keep the sheet's id so it updates in place, with a
+            // new request so re-sharing the same URL still restarts it.
+            if live != nil {
+                live?.source = src
+                live?.autoConnect = true
+                live?.request = UUID()
+            } else {
+                live = LiveLaunch(source: src, autoConnect: true)
+            }
         }
     }
 
@@ -480,4 +492,11 @@ enum VideoImporter {
         return Image(nsImage: NSImage(cgImage: cgImage, size: .zero))
         #endif
     }
+}
+
+private struct LiveLaunch: Identifiable {
+    let id = UUID()
+    var source: String?
+    var autoConnect = false
+    var request = UUID()
 }

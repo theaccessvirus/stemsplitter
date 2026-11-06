@@ -63,8 +63,12 @@ async def main(url, start):
             capture_url, additional_headers={'Authorization': 'Bearer ' + token},
             max_size=65536, max_queue=2, close_timeout=3, ssl=ssl_context) as ws:
         # -re feeds at playback speed so the server's 10s queue never overflows.
+        # YouTube resets slow-read connections mid-track; reconnect resumes at the
+        # same byte instead of ending the track early.
+        reconnect = ['-reconnect', '1', '-reconnect_streamed', '1',
+                     '-reconnect_on_network_error', '1', '-reconnect_delay_max', '10']
         ff = await asyncio.create_subprocess_exec(
-            FFMPEG, '-hide_banner', '-loglevel', 'error', *seek, '-re', '-i', source,
+            FFMPEG, '-hide_banner', '-loglevel', 'error', *seek, *reconnect, '-re', '-i', source,
             '-ac', '2', '-ar', '44100', '-c:a', 'pcm_f32le', '-f', 'f32le', 'pipe:1',
             stdout=asyncio.subprocess.PIPE)
         try:

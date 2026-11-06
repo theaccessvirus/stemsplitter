@@ -256,9 +256,13 @@ public struct LiveStreamView: View {
     @State private var paused = false
     @State private var scrubbing: Double?
 
-    public init(autoConnect: Bool = false, source: String? = nil) {
+    /// Changes on every deep link, including a repeat of the same URL.
+    private let request: UUID
+
+    public init(autoConnect: Bool = false, source: String? = nil, request: UUID = UUID()) {
         self.autoConnect = autoConnect
         self.source = source
+        self.request = request
     }
 
     public var body: some View {
@@ -349,10 +353,10 @@ public struct LiveStreamView: View {
                 }
                 #endif
             }
-            .onChange(of: source) { _, newSource in
-                // A new shared link arriving while the screen is already open:
+            .onChange(of: request) { _, _ in
+                // A shared link arriving while the screen is already open:
                 // onAppear fired only once, so resubmit here to swap the track.
-                guard let newSource, !newSource.isEmpty else { return }
+                guard let newSource = source, !newSource.isEmpty else { return }
                 let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !key.isEmpty else { return }
                 Task { await submitThenConnect(newSource, key: key) }
