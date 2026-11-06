@@ -9,6 +9,7 @@ playback speed, so finite tracks play to the end and radio plays until stopped.
 import asyncio
 import os
 import re
+import signal
 import ssl
 import sys
 from urllib.parse import parse_qs, urlparse
@@ -90,6 +91,15 @@ async def main(url, start):
                 await ff.communicate()
 
 
+def stop_group(*_):
+    """SIGTERM from the server's stop_fetch: take yt-dlp and ffmpeg down too,
+    instead of leaving them running as orphans."""
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    os.killpg(0, signal.SIGTERM)
+
+
 if __name__ == '__main__':
+    os.setpgrp()  # own process group, so stop_group never reaches the server
+    signal.signal(signal.SIGTERM, stop_group)
     url = sys.argv[1]
     asyncio.run(main(url, int(sys.argv[2]) if len(sys.argv) > 2 else start_seconds(url)))
