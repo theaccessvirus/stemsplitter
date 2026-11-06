@@ -13,6 +13,15 @@ final class LiveStreamPlayer: ObservableObject {
     @Published var buffered = 0.0
     /// Seconds into the server's current capture, at the last buffer that finished playing.
     @Published var position = 0.0
+    /// What the server is playing, from its hello on each connect.
+    @Published var track: Track?
+
+    struct Track: Equatable {
+        let url: String
+        let title: String
+        let duration: Int
+        let start: Int
+    }
     @Published var gains: [Float] = [1, 1, 1, 1]
     @Published var muted = [false, false, false, false]
     @Published var solo = [false, false, false, false]
@@ -118,6 +127,10 @@ final class LiveStreamPlayer: ObservableObject {
                     throw StreamError.protocolMismatch
                 }
                 guard generation == run else { return }
+                if let info = meta["track"] as? [String: Any], let url = info["url"] as? String {
+                    track = Track(url: url, title: info["title"] as? String ?? "",
+                                  duration: info["duration"] as? Int ?? 0, start: info["start"] as? Int ?? 0)
+                }
                 retries = 0
                 status = "Waiting for capture…"
                 while !Task.isCancelled {
@@ -248,6 +261,9 @@ public struct LiveStreamView: View {
     private let autoConnect: Bool
     /// A URL shared in from YouTube: submit it to the server, then play.
     private let source: String?
+    /// The track playing now: the server's, which may differ from `source` when
+    /// a Shortcut submitted it directly. Seeks restart this URL.
+    @State private var nowURL: String?
     @State private var sourceTitle = ""
     @State private var sourceDuration = 0
     @State private var submitting = false
@@ -273,12 +289,9 @@ public struct LiveStreamView: View {
                         if submitting { HStack { ProgressView(); Text("Sending to server…") } }
                         if !sourceTitle.isEmpty {
                             Text(sourceTitle).font(.headline)
-                            if sourceDuration > 0 {
-                                Text(durationLabel(sourceDuration)).foregroundStyle(Color.ssTextSecondary)
-                            }
                         }
-                        if source != nil, sourceDuration > 0 { transport }
-                        if let source, let link = URL(string: source) {
+                        if nowURL != nil, sourceDuration > 0 { transport }
+                        if let nowURL, let link = URL(string: nowURL) {
                             Link(destination: link) {
                                 Label("Open in YouTube", systemImage: "arrow.up.right.square")
                             }
@@ -361,6 +374,19 @@ public struct LiveStreamView: View {
                 guard !key.isEmpty else { return }
                 Task { await submitThenConnect(newSource, key: key) }
             }
+            .onChange(of: player.track) { _, track in
+                guard let track else { return }
+                if track.url != nowURL {
+                    // Submitted elsewhere (Shortcut): adopt it, including an empty title.
+                    sourceTitle = track.title
+                    sourceDuration = track.duration
+                } else {
+                    if !track.title.isEmpty { sourceTitle = track.title }
+                    if track.duration > 0 { sourceDuration = track.duration }
+                }
+                nowURL = track.url
+                trackStart = track.start
+            }
             .onDisappear { player.disconnect() }
         }
     }
@@ -407,6 +433,7 @@ public struct LiveStreamView: View {
     private func submitThenConnect(_ url: String, key: String, start: Int? = nil) async {
         submitting = true
         defer { submitting = false }
+        nowURL = url
         // Leave the old stream first so no stale packets play while the server restarts.
         player.disconnect()
         if let endpoint = submitEndpoint() {
@@ -474,13 +501,13 @@ public struct LiveStreamView: View {
     }
 
     private func seek(to second: Int) {
-        guard let source, !source.isEmpty else { return }
+        guard let nowURL, !nowURL.isEmpty else { return }
         let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         let target = max(0, min(sourceDuration - 1, second))
         trackStart = target
         player.position = 0
-        Task { await submitThenConnect(source, key: key, start: target) }
+        Task { await submitThenConnect(nowURL, key: key, start: target) }
     }
 
     /// The submit endpoint is the listen endpoint with ws(s)→http(s) and /listen→/submit.

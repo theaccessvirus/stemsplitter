@@ -55,6 +55,11 @@ skips the title lookup. The app's transport bar (scrubber, play/pause, 15-second
 skips) uses it for every seek and resume, so each one costs a fresh yt-dlp resolve
 plus the 4-second prebuffer, about 10 seconds of silence.
 
+The `/listen` hello carries `track` (url, title, duration, start) for the last
+`/submit`, whoever sent it. A new track ends the old capture and closes listeners,
+so the app's reconnect always shows the current title and seeks the right URL,
+including tracks sent by the Shortcut in `SHARE-SHEET.md`.
+
 The app drives this end to end: a URL shared from YouTube opens
 `onlystems://live?src=<url>`, and the app POSTs `/submit` itself with its
 Keychain key (so the token never leaves the app), seeks to the shared

@@ -24,6 +24,9 @@ TOKEN = os.environ.get('ONLYSTEMS_STREAM_TOKEN', '')
 listeners = set()
 producer = None
 fetch_proc = None  # ponytail: one share-sheet URL plays at a time
+# The submitted track, sent to every listener on connect. A new track ends the old
+# capture, which closes listeners, so their reconnect always carries the current one.
+current_track = None
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='mlx-stream')
 model = None
 metrics = {'state': 'idle', 'chunks': 0, 'inference_seconds': 0.0, 'capture_peak': 0.0}
@@ -161,7 +164,7 @@ async def submit(request: Request):
     if seek is not None and (not isinstance(seek, (int, float)) or seek < 0):
         raise HTTPException(status_code=400, detail='start must be seconds >= 0')
     start = int(seek) if seek is not None else start_seconds(url)
-    global fetch_proc
+    global fetch_proc, current_track
     fetch_running = fetch_proc is not None and fetch_proc.returncode is None
     # An external live capture (Pi) is a producer with no fetch subprocess: never interrupt it.
     if producer is not None and not fetch_running:
@@ -169,6 +172,9 @@ async def submit(request: Request):
     # Describe while the old track still plays, then swap: a new URL replaces the current one.
     # A seek already knows the title, so it skips the extra yt-dlp call.
     title, duration = await describe(url) if seek is None else ('', 0)
+    if seek is not None and current_track and current_track['url'] == url:
+        title, duration = current_track['title'], current_track['duration']
+    current_track = {'url': url, 'title': title, 'duration': duration, 'start': start}
     if fetch_running:
         await stop_fetch()
     # Isolated subprocess: a yt-dlp or ffmpeg failure can never take the server down.
@@ -185,7 +191,8 @@ async def listen(ws: WebSocket):
         return
     await ws.accept()
     await ws.send_json({'protocol': 'OS01', 'sampleRate': RATE, 'stems': NAMES,
-                        'channelsPerStem': 2, 'format': 'float32le', 'prebufferSeconds': 4})
+                        'channelsPerStem': 2, 'format': 'float32le', 'prebufferSeconds': 4,
+                        'track': current_track})
     listeners.add(ws)
     try:
         while True:
