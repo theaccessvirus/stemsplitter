@@ -27,14 +27,56 @@ final class LiveStreamPlayer: ObservableObject {
     private var previousLevels: [Float] = [1, 1, 1, 1]
     private var generation = UUID()
     private let rate = 44100.0
+    /// Set by connect(), cleared only by a user disconnect: while set, any drop
+    /// (network, audio interruption, backgrounding) reconnects on its own.
+    private var target: (endpoint: String, token: String)?
+    private var retryTask: Task<Void, Never>?
+    private var retries = 0
+    private var interruptionObserver: NSObjectProtocol?
+
+    init() {
+        #if os(iOS)
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+            Task { @MainActor [weak self] in self?.resumeIfDropped() }
+        }
+        #endif
+    }
+
+    /// Reconnect now if a connection is wanted but not live (app foregrounded,
+    /// audio interruption ended).
+    func resumeIfDropped() {
+        guard let target, !connected else { return }
+        retryTask?.cancel(); retryTask = nil
+        connect(endpoint: target.endpoint, token: target.token)
+    }
+
+    private func dropped(_ message: String) {
+        teardown()
+        status = message
+        guard let target else { return }
+        retries += 1
+        let delay = min(30, 1 << min(retries, 5))
+        status = "\(message) Reconnecting in \(delay) s…"
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, self.target != nil, !self.connected else { return }
+            self.connect(endpoint: target.endpoint, token: target.token)
+        }
+    }
 
     func connect(endpoint: String, token: String) {
-        disconnect()
+        teardown()
+        retryTask?.cancel(); retryTask = nil
         guard let url = URL(string: endpoint), url.scheme == "wss", url.host != nil,
               url.user == nil, url.password == nil, !token.isEmpty else {
-            status = "Enter a wss:// server address and access key."
+            status = "Enter a wss:// server address and access key in Settings."
+            target = nil
             return
         }
+        target = (endpoint, token)
         let run = generation
         do {
             #if os(iOS)
@@ -48,8 +90,7 @@ final class LiveStreamPlayer: ObservableObject {
                            format: AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2))
             try engine.start()
         } catch {
-            disconnect()
-            status = "Audio output: \(error.localizedDescription)"
+            dropped("Audio output: \(error.localizedDescription).")
             return
         }
         var request = URLRequest(url: url)
@@ -75,6 +116,7 @@ final class LiveStreamPlayer: ObservableObject {
                     throw StreamError.protocolMismatch
                 }
                 guard generation == run else { return }
+                retries = 0
                 status = "Waiting for capture…"
                 while !Task.isCancelled {
                     let message = try await ws.receive()
@@ -91,8 +133,7 @@ final class LiveStreamPlayer: ObservableObject {
                 }
             } catch {
                 guard generation == run else { return }
-                disconnect()
-                status = "Stream stopped: \(error.localizedDescription)"
+                dropped("Stream stopped: \(error.localizedDescription)")
             }
         }
         pumpTask = Task { [weak self] in
@@ -107,8 +148,7 @@ final class LiveStreamPlayer: ObservableObject {
         guard generation == run, connected else { return }
         buffered = Double(queuedFrames + scheduledFrames) / rate
         guard engine.isRunning else {
-            disconnect()
-            status = "Audio output interrupted. Reconnect to resume."
+            dropped("Audio output interrupted.")
             return
         }
         if !started {
@@ -157,7 +197,15 @@ final class LiveStreamPlayer: ObservableObject {
         }
     }
 
+    /// User-initiated stop: no automatic reconnect afterwards.
     func disconnect() {
+        target = nil
+        retryTask?.cancel(); retryTask = nil
+        retries = 0
+        teardown()
+    }
+
+    private func teardown() {
         generation = UUID()
         receiveTask?.cancel(); receiveTask = nil
         pumpTask?.cancel(); pumpTask = nil
@@ -176,8 +224,8 @@ final class LiveStreamPlayer: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .protocolMismatch: "Server audio format is incompatible."
-            case .discontinuity: "Audio timeline changed. Reconnect to resume."
-            case .tooFarBehind: "Playback fell more than 10 seconds behind. Reconnect to resume."
+            case .discontinuity: "Audio timeline changed."
+            case .tooFarBehind: "Playback fell more than 10 seconds behind."
             }
         }
     }
@@ -188,6 +236,8 @@ public struct LiveStreamView: View {
     @AppStorage("onlyStemsLiveEndpoint") private var endpoint = "wss://theaccessvir.us/onlystems/listen"
     @State private var token = ""
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showingSettings = false
     private let names = ["Drums", "Bass", "Other", "Vocals"]
     private let colors: [Color] = [.red, .green, .orange, .cyan]
     /// Opened from the onlystems:// deep link: connect on appear using the saved key.
@@ -222,22 +272,7 @@ public struct LiveStreamView: View {
                         }
                     }
                 }
-                Section("Input · cloud capture") {
-                    TextField("wss://server/onlystems/listen", text: $endpoint)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        #endif
-                    SecureField("Access key", text: $token)
-                        .autocorrectionDisabled()
-                    Button(player.connected ? "Disconnect" : "Connect") {
-                        if player.connected { player.disconnect() }
-                        else {
-                            LiveStreamKey.save(token)
-                            player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
-                                              token: token.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                    }
+                Section {
                     Text(player.status).accessibilityAddTraits(.updatesFrequently)
                     if player.connected { Text("Buffered: \(player.buffered, specifier: "%.1f") s") }
                 }
@@ -270,10 +305,23 @@ public struct LiveStreamView: View {
                 }
             }
             .navigationTitle("onlyStems Live")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .sheet(isPresented: $showingSettings) { settings }
+            .onChange(of: scenePhase) { _, phase in
+                // Back from the background: iOS may have dropped the socket or
+                // stopped the engine while away. Resume without a tap.
+                if phase == .active { player.resumeIfDropped() }
+            }
             .onAppear {
                 token = LiveStreamKey.load()
                 let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                if key.isEmpty { showingSettings = true }
                 // Auto-connect on every open when a key is saved, not only via deep
                 // link. A shared URL (deep link) submits first; a plain open connects.
                 if !player.connected, !key.isEmpty {
@@ -302,6 +350,43 @@ public struct LiveStreamView: View {
             }
             .onDisappear { player.disconnect() }
         }
+    }
+
+    private var settings: some View {
+        NavigationStack {
+            Form {
+                Section("Server") {
+                    TextField("wss://server/onlystems/listen", text: $endpoint)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                    SecureField("Access key", text: $token)
+                        .autocorrectionDisabled()
+                }
+                Section {
+                    Button(player.connected ? "Disconnect" : "Connect") {
+                        if player.connected { player.disconnect() }
+                        else { connectFromSettings() }
+                    }
+                    Text(player.status)
+                }
+            }
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showingSettings = false }
+                }
+            }
+        }
+    }
+
+    private func connectFromSettings() {
+        let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        LiveStreamKey.save(key)
+        player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
     }
 
     /// POST the shared URL to the server (starts separation), show its title,
