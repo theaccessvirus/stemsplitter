@@ -51,7 +51,7 @@ async def resolve(url):
     proc = await asyncio.create_subprocess_exec(
         sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist',
         '-f', 'bestaudio/best', '-O', 'is_live', '-O', 'urls', '--', url,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        stdout=asyncio.subprocess.PIPE)  # errors go to the service log
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
     except asyncio.TimeoutError:
