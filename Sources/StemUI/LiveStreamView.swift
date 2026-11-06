@@ -11,6 +11,8 @@ final class LiveStreamPlayer: ObservableObject {
     @Published var status = "Disconnected"
     @Published var connected = false
     @Published var buffered = 0.0
+    /// Seconds into the server's current capture, at the last buffer that finished playing.
+    @Published var position = 0.0
     @Published var gains: [Float] = [1, 1, 1, 1]
     @Published var muted = [false, false, false, false]
     @Published var solo = [false, false, false, false]
@@ -180,10 +182,12 @@ final class LiveStreamPlayer: ObservableObject {
             previousLevels = levels
             scheduledFrames += packet.frames
             let count = packet.frames
+            let end = Double(packet.position + UInt64(count)) / rate
             node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == run else { return }
                     self.scheduledFrames = max(0, self.scheduledFrames - count)
+                    self.position = end
                 }
             }
         }
@@ -247,6 +251,10 @@ public struct LiveStreamView: View {
     @State private var sourceTitle = ""
     @State private var sourceDuration = 0
     @State private var submitting = false
+    /// Track second where the server's current capture began (shared timestamp or seek).
+    @State private var trackStart = 0
+    @State private var paused = false
+    @State private var scrubbing: Double?
 
     public init(autoConnect: Bool = false, source: String? = nil) {
         self.autoConnect = autoConnect
@@ -265,6 +273,7 @@ public struct LiveStreamView: View {
                                 Text(durationLabel(sourceDuration)).foregroundStyle(Color.ssTextSecondary)
                             }
                         }
+                        if source != nil, sourceDuration > 0 { transport }
                         if let source, let link = URL(string: source) {
                             Link(destination: link) {
                                 Label("Open in YouTube", systemImage: "arrow.up.right.square")
@@ -391,23 +400,83 @@ public struct LiveStreamView: View {
 
     /// POST the shared URL to the server (starts separation), show its title,
     /// then connect to the live stream with the same key.
-    private func submitThenConnect(_ url: String, key: String) async {
+    private func submitThenConnect(_ url: String, key: String, start: Int? = nil) async {
         submitting = true
         defer { submitting = false }
+        // Leave the old stream first so no stale packets play while the server restarts.
+        player.disconnect()
         if let endpoint = submitEndpoint() {
             var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url])
+            var body: [String: Any] = ["url": url]
+            if let start { body["start"] = start }
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
             if let (data, response) = try? await URLSession.shared.data(for: request),
                (response as? HTTPURLResponse)?.statusCode == 200,
                let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                sourceTitle = (meta["title"] as? String) ?? ""
-                sourceDuration = (meta["duration"] as? Int) ?? 0
+                // A seek returns no title; keep the one from the first submit.
+                if let title = meta["title"] as? String, !title.isEmpty { sourceTitle = title }
+                if let duration = meta["duration"] as? Int, duration > 0 { sourceDuration = duration }
+                trackStart = (meta["start"] as? Int) ?? start ?? 0
             }
         }
+        player.position = 0
+        paused = false
         player.connect(endpoint: self.endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
+    }
+
+    /// Current track second: where the capture began plus what has played since.
+    private var elapsed: Double {
+        min(Double(sourceDuration), Double(trackStart) + player.position)
+    }
+
+    /// Seek and pause restart the server fetch at a new second; the stream is
+    /// separated in real time, so there is no local copy of the track to scrub.
+    @ViewBuilder
+    private var transport: some View {
+        VStack(spacing: 4) {
+            Slider(value: Binding(get: { scrubbing ?? elapsed }, set: { scrubbing = $0 }),
+                   in: 0...Double(sourceDuration)) { editing in
+                if !editing, let target = scrubbing {
+                    scrubbing = nil
+                    seek(to: Int(target))
+                }
+            }
+            .accessibilityLabel("Playback position")
+            HStack {
+                Text(durationLabel(Int(scrubbing ?? elapsed))).monospacedDigit()
+                Spacer()
+                Text(durationLabel(sourceDuration)).monospacedDigit()
+            }
+            .font(.caption).foregroundStyle(Color.ssTextSecondary)
+            HStack(spacing: 40) {
+                Button { seek(to: Int(elapsed) - 15) } label: { Image(systemName: "gobackward.15") }
+                    .accessibilityLabel("Back 15 seconds")
+                Button {
+                    if paused { seek(to: Int(elapsed)) }
+                    else { paused = true; player.disconnect(); player.status = "Paused" }
+                } label: { Image(systemName: paused ? "play.fill" : "pause.fill") }
+                    .accessibilityLabel(paused ? "Play" : "Pause")
+                Button { seek(to: Int(elapsed) + 15) } label: { Image(systemName: "goforward.15") }
+                    .accessibilityLabel("Forward 15 seconds")
+            }
+            .font(.title2)
+            .buttonStyle(.borderless)
+            .disabled(submitting)
+            .padding(.top, 4)
+        }
+    }
+
+    private func seek(to second: Int) {
+        guard let source, !source.isEmpty else { return }
+        let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        let target = max(0, min(sourceDuration - 1, second))
+        trackStart = target
+        player.position = 0
+        Task { await submitThenConnect(source, key: key, start: target) }
     }
 
     /// The submit endpoint is the listen endpoint with ws(s)→http(s) and /listen→/submit.

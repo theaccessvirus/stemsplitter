@@ -11,6 +11,8 @@ import time
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
+from fetch import start_seconds
+
 RATE = 44100
 WINDOW = RATE * 4
 OVERLAP = RATE // 2
@@ -147,25 +149,31 @@ async def stop_fetch():
 
 @app.post('/submit')
 async def submit(request: Request):
-    """Receive one URL from the iOS Share Sheet and play it through the capture pipeline."""
+    """Receive one URL from the iOS Share Sheet and play it through the capture pipeline.
+    Optional `start` (seconds) restarts the same track there: the app's seek and resume."""
     if not hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + TOKEN):
         raise HTTPException(status_code=401)
     body = await request.json()
     url = str((body or {}).get('url', '')).strip()
     if not url.startswith(('http://', 'https://')):
         raise HTTPException(status_code=400, detail='Need an http(s) url')
+    seek = (body or {}).get('start')
+    if seek is not None and (not isinstance(seek, (int, float)) or seek < 0):
+        raise HTTPException(status_code=400, detail='start must be seconds >= 0')
+    start = int(seek) if seek is not None else start_seconds(url)
     global fetch_proc
     fetch_running = fetch_proc is not None and fetch_proc.returncode is None
     # An external live capture (Pi) is a producer with no fetch subprocess: never interrupt it.
     if producer is not None and not fetch_running:
         raise HTTPException(status_code=409, detail='Live capture is connected; stop it first')
     # Describe while the old track still plays, then swap: a new URL replaces the current one.
-    title, duration = await describe(url)
+    # A seek already knows the title, so it skips the extra yt-dlp call.
+    title, duration = await describe(url) if seek is None else ('', 0)
     if fetch_running:
         await stop_fetch()
     # Isolated subprocess: a yt-dlp or ffmpeg failure can never take the server down.
-    fetch_proc = await asyncio.create_subprocess_exec(sys.executable, 'fetch.py', url)
-    return {'accepted': url, 'title': title, 'duration': duration}
+    fetch_proc = await asyncio.create_subprocess_exec(sys.executable, 'fetch.py', url, str(start))
+    return {'accepted': url, 'title': title, 'duration': duration, 'start': start}
 
 
 @app.websocket('/listen')

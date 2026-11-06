@@ -1,7 +1,7 @@
 """Fetch one URL and feed it once through the private capture socket.
 
 Launched by the /submit endpoint from an iOS Share Sheet, or run by hand:
-    python fetch.py <url>
+    python fetch.py <url> [start-seconds]
 yt-dlp resolves the direct audio URL for YouTube watch pages and youtu.be links;
 plain radio/HLS stream URLs are streamed as-is. ffmpeg streams either kind at
 playback speed, so finite tracks play to the end and radio plays until stopped.
@@ -49,7 +49,7 @@ async def resolve(url):
     return url
 
 
-async def main(url):
+async def main(url, start):
     if urlparse(url).scheme not in ('http', 'https'):
         raise ValueError('Need an http(s) url')
     capture_url = os.environ['ONLYSTEMS_CAPTURE_URL']
@@ -57,8 +57,8 @@ async def main(url):
     # TLS only when the capture endpoint is wss; the private LAN server speaks plain ws.
     ssl_context = ssl.create_default_context() if urlparse(capture_url).scheme == 'wss' else None
     source = await resolve(url)
-    # Start where the share left off: -ss before -i seeks the resolved stream.
-    seek = ['-ss', str(start_seconds(url))] if start_seconds(url) > 0 else []
+    # -ss before -i seeks the resolved stream: the shared timestamp or an app seek.
+    seek = ['-ss', str(start)] if start > 0 else []
     async with websockets.connect(
             capture_url, additional_headers={'Authorization': 'Bearer ' + token},
             max_size=65536, max_queue=2, close_timeout=3, ssl=ssl_context) as ws:
@@ -80,4 +80,5 @@ async def main(url):
 
 
 if __name__ == '__main__':
-    asyncio.run(main(sys.argv[1]))
+    url = sys.argv[1]
+    asyncio.run(main(url, int(sys.argv[2]) if len(sys.argv) > 2 else start_seconds(url)))
