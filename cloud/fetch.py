@@ -9,9 +9,11 @@ playback speed, so finite tracks play to the end and radio plays until stopped.
 import asyncio
 import os
 import re
+import shutil
 import signal
 import ssl
 import sys
+import tempfile
 from urllib.parse import parse_qs, urlparse
 
 import websockets
@@ -20,6 +22,10 @@ CHUNK = 4410 * 2 * 4  # 100ms stereo float32le at 44100Hz, matching server.py
 # launchd gives the service a minimal PATH, so name both binaries explicitly.
 # yt-dlp runs as a module of this same venv python; ffmpeg path is overridable.
 FFMPEG = os.environ.get('ONLYSTEMS_FFMPEG', '/opt/homebrew/bin/ffmpeg')
+# Resume a dropped connection at the same byte (downloads and live streams).
+RECONNECT = ['-reconnect', '1', '-reconnect_streamed', '1',
+             '-reconnect_on_network_error', '1', '-reconnect_delay_max', '10']
+WORKDIR = os.path.join(tempfile.gettempdir(), 'onlystems-fetch')
 
 
 def start_seconds(url):
@@ -38,12 +44,13 @@ def start_seconds(url):
 
 
 async def resolve(url):
-    """Ask yt-dlp for the direct media URL; fall back to the URL itself for raw streams.
+    """Ask yt-dlp for the direct media URL and whether it is a finite recording.
+    Raw radio/HLS URLs yt-dlp cannot resolve come back as-is, not finite.
     --no-playlist: links shared from a YouTube Mix carry `list=RD...`, and without it
     yt-dlp enumerates the whole Mix and never returns."""
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist', '-g',
-        '-f', 'bestaudio/best', '--', url,
+        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist',
+        '-f', 'bestaudio/best', '-O', 'is_live', '-O', 'urls', '--', url,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
@@ -51,10 +58,27 @@ async def resolve(url):
         proc.kill()
         await proc.communicate()
         raise RuntimeError('yt-dlp did not resolve ' + url + ' within 30 s')
-    for line in out.decode().splitlines():
+    lines = out.decode().splitlines()
+    for line in lines:
         if line.startswith('http'):
-            return line.strip()
-    return url
+            return line.strip(), lines[0].strip() == 'False'
+    return url, False
+
+
+async def download(source):
+    """Copy a finite recording to a local file at network speed. Read at playback
+    speed, YouTube resets the connection mid-track and ffmpeg's reconnect does not
+    always recover, which ends the track early. One fetch runs at a time, so the
+    previous file is cleared here rather than on exit (SIGTERM skips cleanup)."""
+    shutil.rmtree(WORKDIR, ignore_errors=True)
+    os.makedirs(WORKDIR)
+    path = os.path.join(WORKDIR, 'track.mka')
+    proc = await asyncio.create_subprocess_exec(
+        FFMPEG, '-hide_banner', '-loglevel', 'error', *RECONNECT, '-i', source,
+        '-vn', '-c:a', 'copy', path)
+    if await proc.wait() != 0:
+        raise RuntimeError('ffmpeg could not download the track')
+    return path
 
 
 async def main(url, start):
@@ -64,17 +88,16 @@ async def main(url, start):
     token = os.environ['ONLYSTEMS_STREAM_TOKEN']
     # TLS only when the capture endpoint is wss; the private LAN server speaks plain ws.
     ssl_context = ssl.create_default_context() if urlparse(capture_url).scheme == 'wss' else None
-    source = await resolve(url)
+    source, finite = await resolve(url)
+    if finite:
+        source = await download(source)
     # -ss before -i seeks the resolved stream: the shared timestamp or an app seek.
     seek = ['-ss', str(start)] if start > 0 else []
     async with websockets.connect(
             capture_url, additional_headers={'Authorization': 'Bearer ' + token},
             max_size=65536, max_queue=2, close_timeout=3, ssl=ssl_context) as ws:
         # -re feeds at playback speed so the server's 10s queue never overflows.
-        # YouTube resets slow-read connections mid-track; reconnect resumes at the
-        # same byte instead of ending the track early.
-        reconnect = ['-reconnect', '1', '-reconnect_streamed', '1',
-                     '-reconnect_on_network_error', '1', '-reconnect_delay_max', '10']
+        reconnect = [] if finite else RECONNECT
         ff = await asyncio.create_subprocess_exec(
             FFMPEG, '-hide_banner', '-loglevel', 'error', *seek, *reconnect, '-re', '-i', source,
             '-ac', '2', '-ar', '44100', '-c:a', 'pcm_f32le', '-f', 'f32le', 'pipe:1',
