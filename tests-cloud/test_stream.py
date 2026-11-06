@@ -1,8 +1,11 @@
 import importlib.util
 import pathlib
+import sys
 import unittest
 import numpy as np
 
+# server.py imports its sibling fetch.py.
+sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / 'cloud'))
 spec = importlib.util.spec_from_file_location('stream', pathlib.Path(__file__).parents[1] / 'cloud/server.py')
 stream = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(stream)

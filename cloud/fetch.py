@@ -37,12 +37,19 @@ def start_seconds(url):
 
 
 async def resolve(url):
-    """Ask yt-dlp for the direct media URL; fall back to the URL itself for raw streams."""
+    """Ask yt-dlp for the direct media URL; fall back to the URL itself for raw streams.
+    --no-playlist: links shared from a YouTube Mix carry `list=RD...`, and without it
+    yt-dlp enumerates the whole Mix and never returns."""
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '-g', '-f', 'bestaudio/best',
-        '--', url,
+        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist', '-g',
+        '-f', 'bestaudio/best', '--', url,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-    out, _ = await proc.communicate()
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        raise RuntimeError('yt-dlp did not resolve ' + url + ' within 30 s')
     for line in out.decode().splitlines():
         if line.startswith('http'):
             return line.strip()
