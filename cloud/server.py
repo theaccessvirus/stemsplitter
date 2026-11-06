@@ -121,10 +121,15 @@ async def describe(url):
     because launchd gives the service a minimal PATH."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist',
+            sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist', '-I', '1',
             '--print', '%(title)s', '--print', '%(duration)s', '--', url,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
+        except asyncio.TimeoutError:
+            proc.kill()  # wait_for gives up on the call but leaves yt-dlp running
+            await proc.communicate()
+            raise
         title, _, duration = out.decode().strip().partition('\n')
         return title.strip(), int(float(duration)) if duration.strip().replace('.', '').isdigit() else 0
     except Exception:

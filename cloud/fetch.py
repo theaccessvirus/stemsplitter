@@ -46,10 +46,11 @@ def start_seconds(url):
 async def resolve(url):
     """Ask yt-dlp for the direct media URL and whether it is a finite recording.
     Raw radio/HLS URLs yt-dlp cannot resolve come back as-is, not finite.
-    --no-playlist: links shared from a YouTube Mix carry `list=RD...`, and without it
-    yt-dlp enumerates the whole Mix and never returns."""
+    A YouTube Mix never ends, so yt-dlp must not enumerate it: --no-playlist covers a
+    watch link inside a Mix (`v=...&list=RD...`), -I 1 a bare Mix or playlist link
+    (`playlist?list=RD...`), which plays its first track."""
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist',
+        sys.executable, '-m', 'yt_dlp', '-q', '--no-warnings', '--no-playlist', '-I', '1',
         '-f', 'bestaudio/best', '-O', 'is_live', '-O', 'urls', '--', url,
         stdout=asyncio.subprocess.PIPE)  # errors go to the service log
     try:
