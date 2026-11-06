@@ -214,12 +214,18 @@ final class LiveStreamPlayer: ObservableObject {
         }
     }
 
-    /// User-initiated stop: no automatic reconnect afterwards.
-    func disconnect() {
+    /// User-initiated stop: no automatic reconnect afterwards. Pause and seek keep
+    /// the audio session; releasing it lets iOS resume the YouTube app's own track.
+    func disconnect(releaseAudio: Bool = false) {
         target = nil
         retryTask?.cancel(); retryTask = nil
         retries = 0
         teardown()
+        #if os(iOS)
+        if releaseAudio {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+        #endif
     }
 
     private func teardown() {
@@ -231,9 +237,6 @@ final class LiveStreamPlayer: ObservableObject {
         queue.removeAll(); queuedFrames = 0; scheduledFrames = 0
         expected = nil; started = false; previousLevels = [1, 1, 1, 1]; buffered = 0; connected = false
         status = "Disconnected"
-        #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        #endif
     }
 
     enum StreamError: LocalizedError {
@@ -387,7 +390,7 @@ public struct LiveStreamView: View {
                 nowURL = track.url
                 trackStart = track.start
             }
-            .onDisappear { player.disconnect() }
+            .onDisappear { player.disconnect(releaseAudio: true) }
         }
     }
 
@@ -406,7 +409,7 @@ public struct LiveStreamView: View {
                 }
                 Section {
                     Button(player.connected ? "Disconnect" : "Connect") {
-                        if player.connected { player.disconnect() }
+                        if player.connected { player.disconnect(releaseAudio: true) }
                         else { connectFromSettings() }
                     }
                     Text(player.status)
