@@ -64,6 +64,11 @@ public struct AppFlowView: View {
                 .onOpenURL { url in handleDeepLink(url) }
         }
         .onOpenURL { url in handleDeepLink(url) }
+        .onReceive(DeepLinkInbox.shared.$pending) { url in
+            guard let url else { return }
+            DeepLinkInbox.shared.pending = nil
+            handleDeepLink(url)
+        }
         .sheet(isPresented: $showingLinkSheet) {
             LinkDownloadSheet(model: linkModel)
                 .onAppear { linkModel.onSplit = { splitDownloaded($0) } }

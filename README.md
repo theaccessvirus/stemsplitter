@@ -39,7 +39,7 @@ No account. No upload. Nothing leaves your phone.
 
 ## Requirements
 
-- Xcode with the iOS 18 SDK
+- Xcode 26 (the app target is iOS 26; Xcode 16 fails Swift 6 concurrency checks in `ResultModel`)
 - iOS 18+ (device or simulator)
 - The converted Core ML model (see below — not included in the repo)
 - A free personal Apple Developer team is enough to run on your own device
@@ -81,16 +81,16 @@ If `xcode-select` points at CommandLineTools on your machine, prefix with
 
 ```sh
 # Unit tests (model-dependent tests run when Models/htdemucs.mlmodelc exists)
-/usr/bin/env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+/usr/bin/env DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer swift test
 
 # App build verify (no signing needed)
-/usr/bin/env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+/usr/bin/env DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer \
   xcodebuild -project StemSplitter.xcodeproj -scheme StemSplitter \
   -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/dd \
   -quiet build CODE_SIGNING_ALLOWED=NO
 
 # Benchmark harness (timings, memory profile, wall-clock linearity)
-/usr/bin/env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift run spike <corpus-dir>
+/usr/bin/env DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer swift run spike <corpus-dir>
 ```
 
 ## TestFlight

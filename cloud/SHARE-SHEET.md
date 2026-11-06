@@ -21,32 +21,26 @@ Requirements on hbd-server:
   connected or another URL is still playing. Disconnect the live AirPlay capture
   before using share-sheet mode.
 
-## Build the iOS Shortcut (one time, ~5 min)
+## Build the iOS Shortcut (one time, ~2 min)
 
-1. Open the **Shortcuts** app, tap **+** to create a new Shortcut.
-2. Add action **Get Contents of URL**. Set:
-   - URL: `https://theaccessvir.us/onlystems/submit` (public, TLS, works anywhere)
-   - Method: **POST**
-   - Request Body: **JSON**, one field: key `url`, value = **Shortcut Input**
-     (tap the field, pick the "Shortcut Input" variable).
-   - Headers: add `Authorization` = `Bearer <ONLYSTEMS_STREAM_TOKEN>`.
-3. Rename the Shortcut to **OnlyStems**.
-4. Tap the Shortcut's settings (ⓘ or the toggles), enable **Show in Share
-   Sheet**, and set **Accepted Types** to **URLs** only.
+Needs a StemSplitter build with the **Play in onlyStems Live** action (App Intent
+`PlayInOnlyStemsIntent` in `App/StemSplitterApp.swift`).
+
+1. In **Shortcuts**, create a Shortcut named **OnlyStems**.
+2. Settings (ⓘ): enable **Show in Share Sheet**, accepted types **URLs**.
+3. Add the action **Play in onlyStems Live** and set **Link** to
+   **Shortcut Input**.
+
+The app opens straight to the live screen, POSTs `/submit` itself with its
+Keychain key, and connects. The Shortcut holds no token. An `Open URLs`
+step with `onlystems://live` also works but makes iOS ask "Open in
+StemSplitter?" each time; the app's own intent does not.
 
 ## Use it
 
 1. In the YouTube app, tap **Share**. Enable **"Start at [current time]"** so the
    URL carries the timestamp; the server seeks there instead of restarting.
-2. Scroll to **OnlyStems**, tap it.
-3. The OnlyStems app opens straight to the live screen and starts playing (the
-   shortcut ends with `Open URL onlystems://live`, which auto-connects with the
-   saved key). Mute any stem.
-
-The `onlystems://live` deep link ships in the app binary; it works only after
-the TestFlight build that added it (URL scheme `onlystems`, auto-connect in
-`LiveStreamView`). Until then, end the shortcut with `Open App → StemSplitter`
-and tap onlyStems Live → Connect.
+2. Scroll to **OnlyStems**, tap it. Mute any stem.
 
 Start-time parsing lives in `fetch.py` (`t`, `start`, `time_continue`), passed to
 ffmpeg as `-ss`. Radio streams ignore it.
