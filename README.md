@@ -93,6 +93,15 @@ If `xcode-select` points at CommandLineTools on your machine, prefix with
 /usr/bin/env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift run spike <corpus-dir>
 ```
 
+## TestFlight
+
+Xcode Cloud workflow "Main → TestFlight" archives every push to `main` or `dev`
+and numbers builds with its own run counter (the project's
+`CURRENT_PROJECT_VERSION` stays 1). Post-actions send each build to the internal
+group "Development" and the external group "Close Circle". The internal group's
+"Automatic for Xcode Builds" setting does not cover Xcode Cloud builds, so the
+workflow post-action is what delivers them.
+
 ## Use
 
 1. **Pick.** The picker runs out of process — the app never asks for photo-library
