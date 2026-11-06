@@ -19,7 +19,10 @@ must remain open; background playback is not enabled in this preview.
   `/Users/models/moses-stems/backend` to reuse its Demucs GroupNorm kernel fix.
 - Uses the existing cached `htdemucs` demucs-mlx model. One dedicated inference
   thread serializes loading and evaluation. No new weight download required.
-- Pi: `~/onlystems-live`, user service `onlystems-capture.service`.
+- Pi: `~/onlystems-live`, user service `onlystems-capture.service`, disabled since
+  2026-11-05 (unreliable, and its connection held the single capture slot, so
+  `/submit` returned 409). Capture now runs on HBD through `/submit`. Re-enable with
+  `systemctl --user enable --now onlystems-capture.service` on the Pi.
 - Reverse proxy: `adamk@vm-ak`, `/home/adamk/apps/theaccessvir-static/nginx.conf`,
   container `theaccessvir-static`. Before-change backup has suffix
   `.before-onlystems-20261102`.
@@ -44,9 +47,13 @@ to raw radio/HLS URLs as-is) and streams it through ffmpeg into the same `/captu
 socket at playback speed (`-re`). The `/listen` stream then plays the separated
 stems exactly as with Pi capture. `/health` reports `fetching`.
 
-One source at a time: `/submit` returns 409 while a live capture producer is
-connected or another URL is still playing. Stop live capture before share-sheet
-use.
+One source at a time: `/submit` returns 409 while an external capture producer
+(the Pi) is connected. A new URL replaces the one playing.
+
+`/submit` takes an optional `start` (seconds) that restarts the same URL there and
+skips the title lookup. The app's transport bar (scrubber, play/pause, 15-second
+skips) uses it for every seek and resume, so each one costs a fresh yt-dlp resolve
+plus the 4-second prebuffer, about 10 seconds of silence.
 
 The app drives this end to end: a URL shared from YouTube opens
 `onlystems://live?src=<url>`, and the app POSTs `/submit` itself with its
