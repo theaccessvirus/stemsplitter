@@ -9,9 +9,8 @@ import XCTest
 ///
 /// All fixtures are generated programmatically by `AudioFixtureMaker` (AAC via
 /// ExtAudioFile, video via AVAssetWriter, corrupt via truncation) into
-/// `Tests/Fixtures/Audio/` — regenerated once per test-bundle process, so the
-/// checked-in files are just the latest run's artifacts and tests self-heal if
-/// they are missing.
+/// a unique temporary directory per test-bundle process. No binary fixtures
+/// are required in the checkout.
 final class AudioExtractorTests: XCTestCase {
 
     // MARK: - probe()
@@ -296,8 +295,7 @@ final class AudioExtractorTests: XCTestCase {
 // MARK: - Fixture generation
 
 /// The fixture set for AudioExtractor tests. Everything is synthesized here —
-/// no checked-in binary dependencies; `Tests/Fixtures/Audio/` holds the
-/// regenerated artifacts.
+/// no checked-in binary dependencies. Artifacts live in temporary storage.
 enum AudioFixtureMaker {
 
     enum Fixture: String, CaseIterable {
@@ -324,7 +322,7 @@ enum AudioFixtureMaker {
         if generated.contains(fixture) {
             return url(for: fixture)
         }
-        try? FileManager.default.createDirectory(
+        try FileManager.default.createDirectory(
             at: directory(), withIntermediateDirectories: true)
         switch fixture {
         case .videoNoAudio:
@@ -356,21 +354,15 @@ enum AudioFixtureMaker {
         return url(for: fixture)
     }
 
+    private static let fixtureDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("StemSplitter-AudioFixtures-" + UUID().uuidString, isDirectory: true)
+
     private static func url(for fixture: Fixture) -> URL {
-        // #filePath: …/Tests/StemCoreTests/AudioExtractorTests.swift
-        let testsDir = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // Tests/StemCoreTests
-            .deletingLastPathComponent()  // Tests
-        return testsDir
-            .appendingPathComponent("Fixtures/Audio", isDirectory: true)
-            .appendingPathComponent(fixture.rawValue)
+        directory().appendingPathComponent(fixture.rawValue)
     }
 
     private static func directory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/Audio", isDirectory: true)
+        fixtureDirectory
     }
 
     enum Signal {

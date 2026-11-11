@@ -48,7 +48,7 @@ No account. No upload. Nothing leaves your phone.
 ## Install (build from source)
 
 ```sh
-git clone https://github.com/kristerssaulitis/stemsplitter.git
+git clone --branch dev https://github.com/theaccessvirus/stemsplitter.git
 cd stemsplitter
 open StemSplitter.xcodeproj
 ```
@@ -114,6 +114,18 @@ workflow post-action is what delivers them.
 4. **Export.** Share the mix, any stem (44.1 kHz / 24-bit WAV, RF64 beyond 4 GB), or
    the original video re-rendered with your mix — via the share sheet. Export is the
    only persistence: split outputs live in caches and are purged on next launch.
+
+## Repository guide
+
+- `App/` and `StemSplitter.xcodeproj/`: iOS app entry point, assets, and build settings.
+- `Sources/`: audio engine (`StemCore`), interface (`StemUI`), and link imports (`StemLink`).
+- `Tests/`: Swift unit tests; audio fixtures are synthesized in temporary storage on each test run.
+- `cloud/` and `tests-cloud/`: optional live streaming service, deployment notes, and Python tests.
+- `Spike/`, `Release/`, and `ci_scripts/`: benchmark harness, release materials, and CI setup.
+
+`Models/`, `.build/`, and `.work/` are ignored local directories. `.work/` can
+contain credentials, conversion tools, and release artifacts; it is not just a
+build cache. See [cloud/README.md](cloud/README.md) for live-service setup.
 
 ## Architecture
 

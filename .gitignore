@@ -1,12 +1,31 @@
+# Swift and Xcode build output / per-user settings
 .build/
-.work/
 DerivedData/
-.DS_Store
 *.xcuserstate
 xcuserdata/
 .swiftpm/
+
+# Local tooling, model weights, and working data
+.work/
+Models/
 .zcode/
 .gstack/
-Models/
 
+# macOS metadata
+.DS_Store
+
+# Python caches and local environments
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local credentials (keep example configuration trackable)
+.env
+.env.*
+!.env.example
+stream.env
+
+# Legacy generated audio test output
+/Tests/Fixtures/Audio/
