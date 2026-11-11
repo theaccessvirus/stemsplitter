@@ -255,7 +255,6 @@ public struct LiveStreamView: View {
     @StateObject private var player = LiveStreamPlayer()
     @AppStorage("onlyStemsLiveEndpoint") private var endpoint = "wss://theaccessvir.us/onlystems/listen"
     @State private var token = ""
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingSettings = false
     private let names = ["Drums", "Bass", "Other", "Vocals"]
@@ -274,6 +273,7 @@ public struct LiveStreamView: View {
     @State private var trackStart = 0
     @State private var paused = false
     @State private var scrubbing: Double?
+    @State private var sourceRequests = LiveSourceRequestGate()
 
     /// Changes on every deep link, including a repeat of the same URL.
     private let request: UUID
@@ -296,7 +296,7 @@ public struct LiveStreamView: View {
                         if nowURL != nil, sourceDuration > 0 { transport }
                         if let nowURL, let link = URL(string: nowURL) {
                             Link(destination: link) {
-                                Label("Open in YouTube", systemImage: "arrow.up.right.square")
+                                Label("Open source", systemImage: "arrow.up.right.square")
                             }
                         }
                     }
@@ -305,6 +305,7 @@ public struct LiveStreamView: View {
                     Text(player.status).accessibilityAddTraits(.updatesFrequently)
                     if player.connected { Text("Buffered: \(player.buffered, specifier: "%.1f") s") }
                 }
+                if showingSettings { settings }
                 Section("Mixer") {
                     ForEach(0..<4, id: \.self) { i in
                         VStack(alignment: .leading) {
@@ -336,12 +337,10 @@ public struct LiveStreamView: View {
             .navigationTitle("onlyStems Live")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                    Button { showingSettings.toggle() } label: { Image(systemName: "gearshape") }
                         .accessibilityLabel("Settings")
                 }
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .sheet(isPresented: $showingSettings) { settings }
             .onChange(of: scenePhase) { _, phase in
                 // Back from the background: iOS may have dropped the socket or
                 // stopped the engine while away. Resume without a tap.
@@ -354,9 +353,7 @@ public struct LiveStreamView: View {
                 // Auto-connect on every open when a key is saved, not only via deep
                 // link. A shared URL (deep link) submits first; a plain open connects.
                 if !player.connected, !key.isEmpty {
-                    if let source, !source.isEmpty {
-                        Task { await submitThenConnect(source, key: key) }
-                    } else {
+                    if !submitSharedRequestIfReady(key: key), source == nil {
                         player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
                     }
                 }
@@ -372,10 +369,9 @@ public struct LiveStreamView: View {
             .onChange(of: request) { _, _ in
                 // A shared link arriving while the screen is already open:
                 // onAppear fired only once, so resubmit here to swap the track.
-                guard let newSource = source, !newSource.isEmpty else { return }
                 let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !key.isEmpty else { return }
-                Task { await submitThenConnect(newSource, key: key) }
+                if key.isEmpty { showingSettings = true }
+                submitSharedRequestIfReady(key: key)
             }
             .onChange(of: player.track) { _, track in
                 guard let track else { return }
@@ -395,32 +391,20 @@ public struct LiveStreamView: View {
     }
 
     private var settings: some View {
-        NavigationStack {
-            Form {
-                Section("Server") {
-                    TextField("wss://server/onlystems/listen", text: $endpoint)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        #endif
-                    SecureField("Access key", text: $token)
-                        .autocorrectionDisabled()
-                }
-                Section {
-                    Button(player.connected ? "Disconnect" : "Connect") {
-                        if player.connected { player.disconnect(releaseAudio: true) }
-                        else { connectFromSettings() }
-                    }
-                    Text(player.status)
-                }
+        Section("Connection") {
+            TextField("wss://server/onlystems/listen", text: $endpoint)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                #endif
+            SecureField("Access key", text: $token)
+                .autocorrectionDisabled()
+            Button(player.connected ? "Disconnect" : "Connect") {
+                if player.connected { player.disconnect(releaseAudio: true) }
+                else { connectFromSettings() }
             }
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showingSettings = false }
-                }
-            }
+            Button("Hide connection settings") { showingSettings = false }
         }
     }
 
@@ -428,7 +412,18 @@ public struct LiveStreamView: View {
         let key = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         LiveStreamKey.save(key)
-        player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
+        if !submitSharedRequestIfReady(key: key) {
+            player.connect(endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines), token: key)
+        }
+    }
+
+    @discardableResult
+    private func submitSharedRequestIfReady(key: String) -> Bool {
+        guard let source = sourceRequests.claim(request: request, source: source, isReady: !key.isEmpty) else {
+            return false
+        }
+        Task { await submitThenConnect(source, key: key) }
+        return true
     }
 
     /// POST the shared URL to the server (starts separation), show its title,
@@ -562,5 +557,34 @@ private enum LiveStreamKey {
             item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             SecItemAdd(item as CFDictionary, nil)
         }
+    }
+}
+
+/// The app has one persistent screen. Deep links update its existing player.
+public struct LiveRootView: View {
+    @State private var source: String?
+    @State private var request = UUID()
+
+    public init() {}
+
+    public var body: some View {
+        LiveStreamView(autoConnect: true, source: source, request: request)
+            .preferredColorScheme(.dark)
+            .onOpenURL(perform: open)
+            .onReceive(DeepLinkInbox.shared.$pending) { url in
+                guard let url else { return }
+                DeepLinkInbox.shared.pending = nil
+                open(url)
+            }
+    }
+
+    private func open(_ url: URL) {
+        guard url.scheme == "onlystems" else { return }
+        // Legacy home/history/link URLs also stay on Live.
+        guard let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "src" })?.value,
+              !value.isEmpty else { return }
+        source = value
+        request = UUID()
     }
 }

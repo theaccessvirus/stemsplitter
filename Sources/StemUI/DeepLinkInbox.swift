@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// Hands an onlystems:// route from an App Intent to `AppFlowView`. The intent can
+/// Hands an onlystems:// route from an App Intent to `LiveRootView`. The intent can
 /// run before the view exists (cold launch), so the link waits here until the
 /// view subscribes; `@Published` replays the current value to a new subscriber.
 @MainActor
